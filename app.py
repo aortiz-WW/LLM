@@ -8,6 +8,11 @@ from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationalRetrievalChain
 from htmlTemplate import css, bot_template, user_template
 from langchain.llms import HuggingFaceHub
+import torch
+from transformers import AutoModelForCausalLM
+
+print(torch.cuda.is_available())
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def get_pdf_text(pdf_docs):
     text = ""
@@ -31,15 +36,16 @@ def get_text_chunks(text):
 
 def get_vectorstore(text_chunks):
     
-    embeddings = HuggingFaceInstructEmbeddings(model_name="BAAI/bge-large-en")
+    model_kwargs = {'device': "cuda"}
+    embeddings = HuggingFaceInstructEmbeddings(model_name="BAAI/bge-large-en", model_kwargs=model_kwargs)
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
 
 
 def get_conversation_chain(vectorstore):
     
-    llm = HuggingFaceHub(repo_id="tiiuae/falcon-7b", model_kwargs={"temperature":0.3, "max_length":2048})
-
+    # llm = HuggingFaceHub(repo_id="tiiuae/falcon-7b", model_kwargs={"temperature":0.3, "max_length":2048})
+    llm =  AutoModelForCausalLM.from_pretrained("tiiuae/falcon-40b", device = device, device_map= 'auto')
     memory = ConversationBufferMemory(
         memory_key='chat_history', return_messages=True)
     
@@ -54,7 +60,7 @@ def get_conversation_chain(vectorstore):
 def handle_userinput(user_question):
     response = st.session_state.conversation({'question': user_question})
     st.session_state.chat_history = response['chat_history']
-    st.write(response)
+    
     for i, message in enumerate(st.session_state.chat_history):
         if i % 2 == 0:
             st.write(user_template.replace(
